@@ -1,6 +1,5 @@
 import twilio from 'twilio';
-
-const otpStore = globalThis.otpStore || (globalThis.otpStore = new Map());
+import { supabase } from './_supabase.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,7 +12,19 @@ export default async function handler(req, res) {
     return;
   }
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  otpStore.set(phone, { otp, expires: Date.now() + 5 * 60 * 1000 });
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+  // Debug: log env variables (do not log secrets in production!)
+  console.log('SUPABASE_URL:', process.env.SUPABASE_URL);
+  console.log('SUPABASE_SERVICE_ROLE_KEY exists:', !!process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+  // Store OTP in Supabase
+  const { error: dbError, data: dbData } = await supabase.from('otps').insert({ phone, otp, expires_at: expiresAt });
+  console.log('Supabase insert result:', { dbError, dbData });
+  if (dbError) {
+    res.status(500).json({ error: 'Failed to store OTP', details: dbError.message });
+    return;
+  }
 
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
   const authToken = process.env.TWILIO_AUTH_TOKEN;
